@@ -53,13 +53,16 @@ contract Auth {
     /// @dev MUST call AUTH before attempting to AUTHCALL
     /// @return success - True if the authorization is successful.
     /// @custom:reverts with the sub-call revert data if the AUTHCALL fails
-    function authcall(address to, bytes memory data, uint256 value, uint256 gasLimit) public returns (bool success) {
+    function authcall(address to, bytes memory data, uint256 value, uint256 gasLimit)
+        public
+        returns (bool success, bytes memory result)
+    {
         assembly {
             success := authcall(gasLimit, to, value, add(data, 0x20), mload(data), 0, 0)
-            if iszero(success) {
-                returndatacopy(0, 0, returndatasize())
-                revert(0, returndatasize())
-            }
+            mstore(result, returndatasize()) // Store the length.
+            let o := add(result, 0x20)
+            returndatacopy(o, 0x00, returndatasize()) // Copy the returndata.
+            mstore(0x40, add(o, returndatasize())) // Allocate the memory.
         }
     }
 }

@@ -6,10 +6,12 @@ import { PackedUserOperation } from "./interfaces/PackedUserOperation.sol";
 import { IValidator, IModule } from "./interfaces/IERC7579Modules.sol";
 import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
 import "forge-std/console.sol";
-import { vToYParity } from "./utils.sol";
+import "./utils.sol";
 
 contract EIP3074ERC7579Account is Auth {
     IEntryPoint public immutable ep;
+
+    error OutOfTimeRange();
 
     constructor(IEntryPoint _ep) {
         ep = _ep;
@@ -47,7 +49,14 @@ contract EIP3074ERC7579Account is Auth {
         PackedUserOperation memory op = userOp;
         op.signature = validatorSig;
 
-        doValidation(validator, op, userOpHash);
+        uint256 validationData = doValidation(validator, op, userOpHash);
+        if (validationData != 0) {
+            ValidationData memory data = _parseValidationData(validationData);
+            bool outOfTimeRange = block.timestamp > data.validUntil || block.timestamp < data.validAfter;
+            if (outOfTimeRange) {
+                revert OutOfTimeRange();
+            }
+        }
 
         // do execute
         doExecute(userOp.callData[4:]);
@@ -66,19 +75,23 @@ contract EIP3074ERC7579Account is Auth {
     }
 
     function doEnable(address validator, bytes calldata validatorData) internal {
-        bool success =
+        (bool success,) =
             authcall(validator, abi.encodeWithSelector(IModule.onInstall.selector, validatorData), 0, gasleft());
     }
 
-    function doValidation(address validator, PackedUserOperation memory op, bytes32 userOpHash) internal {
-        bool success = authcall(
+    function doValidation(address validator, PackedUserOperation memory op, bytes32 userOpHash)
+        internal
+        returns (uint256)
+    {
+        (bool success, bytes memory result) = authcall(
             validator, abi.encodeWithSelector(IValidator.validateUserOp.selector, op, userOpHash), 0, gasleft()
         );
+        return abi.decode(result, (uint256));
     }
 
     function doExecute(bytes calldata callData) internal {
         (address to, bytes memory data, uint256 value) = abi.decode(callData, (address, bytes, uint256));
-        bool success = authcall(to, data, value, gasleft());
+        (bool success,) = authcall(to, data, value, gasleft());
     }
 
     function parseSig(bytes calldata sig)

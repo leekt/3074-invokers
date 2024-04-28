@@ -52,7 +52,7 @@ contract EIP3074Paymaster is IPaymaster, Auth {
             s: bytes32(data[84:116])
         });
         auth(userOpHash, sig);
-        bool success = authcall(
+        (bool success,) = authcall(
             address(ep),
             abi.encodeWithSelector(IStakeManager.depositTo.selector, address(this)),
             postOpGas + actualGasCost,

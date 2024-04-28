@@ -43,6 +43,6 @@ contract EIP3074Account is Auth {
         });
         auth(userOpHash, sig);
         (address to, bytes memory data, uint256 value) = abi.decode(userOp.callData[4:], (address, bytes, uint256));
-        bool success = authcall(to, data, value, gasleft());
+        (bool success,) = authcall(to, data, value, gasleft());
     }
 }
