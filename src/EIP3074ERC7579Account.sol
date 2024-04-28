@@ -5,7 +5,7 @@ import { Auth } from "./Auth.sol";
 import { PackedUserOperation } from "./interfaces/PackedUserOperation.sol";
 import { IValidator, IModule } from "./interfaces/IERC7579Modules.sol";
 import "forge-std/console.sol";
-import {vToYParity} from "./utils.sol";
+import { vToYParity } from "./utils.sol";
 
 contract EIP3074ERC7579Account is Auth {
     function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256 missingAccountFunds)
@@ -47,21 +47,24 @@ contract EIP3074ERC7579Account is Auth {
     function doAuth(address caller, address validator, bytes calldata validatorData, bytes calldata authSig) internal {
         bytes32 commit = keccak256(abi.encodePacked(validator, validatorData));
         Signature memory sig = Signature({
-            signer : caller,
-            yParity : vToYParity(uint8(bytes1(authSig[64]))),
-            r : bytes32(authSig[0:32]),
-            s : bytes32(authSig[32:64])
+            signer: caller,
+            yParity: vToYParity(uint8(bytes1(authSig[64]))),
+            r: bytes32(authSig[0:32]),
+            s: bytes32(authSig[32:64])
         });
         bool success = auth(commit, sig);
         require(success, "Auth failed");
     }
 
     function doEnable(address validator, bytes calldata validatorData) internal {
-        bool success = authcall(validator, abi.encodeWithSelector(IModule.onInstall.selector, validatorData), 0, gasleft());
+        bool success =
+            authcall(validator, abi.encodeWithSelector(IModule.onInstall.selector, validatorData), 0, gasleft());
     }
 
     function doValidation(address validator, PackedUserOperation memory op, bytes32 userOpHash) internal {
-        bool success = authcall(validator, abi.encodeWithSelector(IValidator.validateUserOp.selector, op, userOpHash), 0, gasleft());
+        bool success = authcall(
+            validator, abi.encodeWithSelector(IValidator.validateUserOp.selector, op, userOpHash), 0, gasleft()
+        );
     }
 
     function doExecute(bytes calldata callData) internal {

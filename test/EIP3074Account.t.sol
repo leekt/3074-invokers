@@ -51,11 +51,7 @@ contract EIP3074AccountTest is Test {
         uint256 nonce = 0;
         bytes memory data = abi.encodePacked(
             invoker.executeUserOp.selector,
-            abi.encode(
-                address(callee),
-                abi.encodeWithSelector(Callee.increment.selector),
-                0
-            )
+            abi.encode(address(callee), abi.encodeWithSelector(Callee.increment.selector), 0)
         );
         PackedUserOperation memory op = PackedUserOperation({
             sender: address(invoker),
@@ -66,7 +62,7 @@ contract EIP3074AccountTest is Test {
             gasFees: bytes32(0),
             accountGasLimits: bytes32(abi.encodePacked(uint128(1000000), uint128(1000000))),
             preVerificationGas: 0,
-            signature: hex"" 
+            signature: hex""
         });
 
         bytes32 userOpHash = ep.getUserOpHash(op);
@@ -82,5 +78,4 @@ contract EIP3074AccountTest is Test {
         //invoker.executeUserOp(op, userOpHash);
         assertEq(callee.counter(owner), 1);
     }
-
 }

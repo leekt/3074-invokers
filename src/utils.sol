@@ -19,9 +19,7 @@ struct ValidationData {
  * Also convert zero validUntil to type(uint48).max.
  * @param validationData - The packed validation data.
  */
-function _parseValidationData(
-    uint256 validationData
-) pure returns (ValidationData memory data) {
+function _parseValidationData(uint256 validationData) pure returns (ValidationData memory data) {
     address aggregator = address(uint160(validationData));
     uint48 validUntil = uint48(validationData >> 160);
     if (validUntil == 0) {

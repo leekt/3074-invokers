@@ -38,14 +38,8 @@ contract EIP3074Test is Test {
             accountGasLimits: bytes32(0),
             preVerificationGas: 0,
             signature: abi.encodePacked(
-                address(mockValidator),
-                uint256(0),
-                abi.encode(
-                    hex"deadbeef",
-                    hex"cafecafe",
-                    abi.encodePacked(r, s, v)
+                address(mockValidator), uint256(0), abi.encode(hex"deadbeef", hex"cafecafe", abi.encodePacked(r, s, v))
                 )
-            )
         });
         account.validateUserOp(op, bytes32(keccak256(hex"deadbeef")), 0);
         account.executeUserOp(op, bytes32(keccak256(hex"deadbeef")));

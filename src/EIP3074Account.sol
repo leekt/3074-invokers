@@ -7,7 +7,7 @@ import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
 import { vToYParity } from "./utils.sol";
 
 contract EIP3074Account is Auth {
-    IEntryPoint immutable public ep;
+    IEntryPoint public immutable ep;
 
     constructor(IEntryPoint _ep) {
         ep = _ep;
@@ -20,7 +20,7 @@ contract EIP3074Account is Auth {
         require(msg.sender == address(ep), "!ep");
         address caller = address(bytes20(bytes32(userOp.nonce)));
         uint256 nonce = uint256(bytes32(userOp.signature[0:32]));
-        bytes32 digest = getDigest(userOpHash, nonce );
+        bytes32 digest = getDigest(userOpHash, nonce);
         address signer = ecrecover(
             digest,
             uint8(bytes1(userOp.signature[96])),
@@ -36,15 +36,12 @@ contract EIP3074Account is Auth {
         require(msg.sender == address(ep), "!ep");
         address caller = address(bytes20(bytes32(userOp.nonce)));
         Signature memory sig = Signature({
-            signer : caller,
-            yParity : vToYParity(uint8(bytes1(userOp.signature[96]))),
-            r : bytes32(userOp.signature[32:64]),
-            s : bytes32(userOp.signature[64:96])
+            signer: caller,
+            yParity: vToYParity(uint8(bytes1(userOp.signature[96]))),
+            r: bytes32(userOp.signature[32:64]),
+            s: bytes32(userOp.signature[64:96])
         });
-        auth(
-            userOpHash,
-            sig
-        );
+        auth(userOpHash, sig);
         (address to, bytes memory data, uint256 value) = abi.decode(userOp.callData[4:], (address, bytes, uint256));
         bool success = authcall(to, data, value, gasleft());
     }
