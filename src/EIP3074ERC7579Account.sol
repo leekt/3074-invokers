@@ -4,14 +4,22 @@ pragma solidity ^0.8.23;
 import { Auth } from "./Auth.sol";
 import { PackedUserOperation } from "./interfaces/PackedUserOperation.sol";
 import { IValidator, IModule } from "./interfaces/IERC7579Modules.sol";
+import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
 import "forge-std/console.sol";
 import { vToYParity } from "./utils.sol";
 
 contract EIP3074ERC7579Account is Auth {
+    IEntryPoint public immutable ep;
+
+    constructor(IEntryPoint _ep) {
+        ep = _ep;
+    }
+
     function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256 missingAccountFunds)
         external
         returns (uint256)
     {
+        require(msg.sender == address(ep), "!ep");
         address caller = address(bytes20(bytes32(userOp.nonce)));
         address validator = address(bytes20(userOp.signature[0:20]));
         uint256 nonce = uint256(bytes32(userOp.signature[20:52]));
@@ -24,6 +32,7 @@ contract EIP3074ERC7579Account is Auth {
     }
 
     function executeUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash) external {
+        require(msg.sender == address(ep), "!ep");
         address caller = address(bytes20(bytes32(userOp.nonce)));
         address validator = address(bytes20(userOp.signature[0:20]));
         (bytes calldata validatorData, bytes calldata validatorSig, bytes calldata authSig) = parseSig(userOp.signature);
