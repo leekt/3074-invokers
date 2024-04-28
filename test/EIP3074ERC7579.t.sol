@@ -5,18 +5,23 @@ import "src/interfaces/PackedUserOperation.sol";
 
 import "src/EIP3074ERC7579Account.sol";
 import "src/MockValidator.sol";
+import { EntryPointLib } from "../src/erc4337Util.sol";
 
 contract EIP3074Test is Test {
     address owner;
     uint256 ownerKey;
+    IEntryPoint public ep;
+    address payable bundler;
 
     EIP3074ERC7579Account account;
     MockValidator mockValidator;
 
     function setUp() external {
+        ep = IEntryPoint(EntryPointLib.deploy());
         (owner, ownerKey) = makeAddrAndKey("Owner");
-        account = new EIP3074ERC7579Account();
+        account = new EIP3074ERC7579Account(ep);
         mockValidator = new MockValidator();
+        bundler = payable(makeAddr("Bundler"));
     }
 
     function testSign() external {
@@ -35,14 +40,16 @@ contract EIP3074Test is Test {
             callData: abi.encodePacked(account.executeUserOp.selector, abi.encode(to, data, value)),
             paymasterAndData: hex"",
             gasFees: bytes32(0),
-            accountGasLimits: bytes32(0),
+            accountGasLimits: bytes32(abi.encodePacked(uint128(1000000), uint128(1000000))),
             preVerificationGas: 0,
             signature: abi.encodePacked(
                 address(mockValidator), uint256(0), abi.encode(hex"deadbeef", hex"cafecafe", abi.encodePacked(r, s, v))
                 )
         });
-        account.validateUserOp(op, bytes32(keccak256(hex"deadbeef")), 0);
-        account.executeUserOp(op, bytes32(keccak256(hex"deadbeef")));
+        PackedUserOperation[] memory ops = new PackedUserOperation[](1);
+        ops[0] = op;
+
+        ep.handleOps(ops, bundler);
         require(to.balance == 1);
     }
 }
