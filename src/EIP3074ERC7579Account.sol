@@ -77,6 +77,7 @@ contract EIP3074ERC7579Account is Auth {
     function doEnable(address validator, bytes calldata validatorData) internal {
         (bool success,) =
             authcall(validator, abi.encodeWithSelector(IModule.onInstall.selector, validatorData), 0, gasleft());
+        require(success, "Enable failed");
     }
 
     function doValidation(address validator, PackedUserOperation memory op, bytes32 userOpHash)
@@ -86,12 +87,14 @@ contract EIP3074ERC7579Account is Auth {
         (bool success, bytes memory result) = authcall(
             validator, abi.encodeWithSelector(IValidator.validateUserOp.selector, op, userOpHash), 0, gasleft()
         );
+        require(success, "Validation failed");
         return abi.decode(result, (uint256));
     }
 
     function doExecute(bytes calldata callData) internal {
         (address to, bytes memory data, uint256 value) = abi.decode(callData, (address, bytes, uint256));
         (bool success,) = authcall(to, data, value, gasleft());
+        require(success, "Execution failed");
     }
 
     function parseSig(bytes calldata sig)
