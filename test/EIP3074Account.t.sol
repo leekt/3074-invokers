@@ -49,9 +49,10 @@ contract EIP3074AccountTest is Test {
         vm.deal(address(invoker), 1e18);
         vm.deal(address(owner), 2);
         uint256 nonce = 0;
+        bytes memory callData = abi.encodeWithSelector(Callee.increment.selector);
         bytes memory data = abi.encodePacked(
             invoker.executeUserOp.selector,
-            abi.encode(address(callee), abi.encodeWithSelector(Callee.increment.selector), 0)
+            abi.encodePacked(AUTHCALL_IDENTIFIER, address(callee), uint256(0), callData.length, callData)
         );
         PackedUserOperation memory op = PackedUserOperation({
             sender: address(invoker),

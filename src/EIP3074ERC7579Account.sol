@@ -7,11 +7,20 @@ import { IValidator, IModule } from "./interfaces/IERC7579Modules.sol";
 import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
 import "forge-std/console.sol";
 import "./utils.sol";
+import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
+
+enum CommitStatus {
+    NA,
+    Approved,
+    Revoked
+}
 
 contract EIP3074ERC7579Account is Auth {
     IEntryPoint public immutable ep;
 
     error OutOfTimeRange();
+
+    mapping(address authority => mapping(bytes32 commit => uint256)) public commitStatus;
 
     constructor(IEntryPoint _ep) {
         ep = _ep;
@@ -92,9 +101,7 @@ contract EIP3074ERC7579Account is Auth {
     }
 
     function doExecute(bytes calldata callData) internal {
-        (address to, bytes memory data, uint256 value) = abi.decode(callData, (address, bytes, uint256));
-        (bool success,) = authcall(to, data, value, gasleft());
-        require(success, "Execution failed");
+        MultiSendAuthCallOnly.multiSend(callData);
     }
 
     function parseSig(bytes calldata sig)

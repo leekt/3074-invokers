@@ -5,6 +5,7 @@ import { Auth } from "./Auth.sol";
 import { PackedUserOperation } from "./interfaces/PackedUserOperation.sol";
 import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
 import { vToYParity } from "./utils.sol";
+import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
 
 contract EIP3074Account is Auth {
     IEntryPoint public immutable ep;
@@ -42,7 +43,6 @@ contract EIP3074Account is Auth {
             s: bytes32(userOp.signature[64:96])
         });
         auth(userOpHash, sig);
-        (address to, bytes memory data, uint256 value) = abi.decode(userOp.callData[4:], (address, bytes, uint256));
-        (bool success,) = authcall(to, data, value, gasleft());
+        MultiSendAuthCallOnly.multiSend(userOp.callData[4:]);
     }
 }
