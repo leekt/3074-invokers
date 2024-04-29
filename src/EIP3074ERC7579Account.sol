@@ -8,19 +8,24 @@ import { IEntryPoint } from "./interfaces/IEntryPoint.sol";
 import "forge-std/console.sol";
 import "./utils.sol";
 import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
+/*
+    TODO
+    - add storage support 
+        - differentiate enable mode/non-enable mode
+    - add hook support
+    - add policy/signer support
+    - merge with https://github.com/thogard785/generalized-interpretable-invoker/tree/main to serve the same role
+    - add staking support
+    Optional
+    - add pre-deposit wrapped ETH?
+ */
 
-enum CommitStatus {
-    NA,
-    Approved,
-    Revoked
-}
-
+// @notice THIS IS EXPERIMENTAL, DO NOT USE THIS FOR PROD
+// @dev NOTE : this is vulnerable to DoS since actual validation for userOpHash is done on the execution side, figuring out the fixes though
 contract EIP3074ERC7579Account is Auth {
     IEntryPoint public immutable ep;
 
     error OutOfTimeRange();
-
-    mapping(address authority => mapping(bytes32 commit => uint256)) public commitStatus;
 
     constructor(IEntryPoint _ep) {
         ep = _ep;
@@ -55,6 +60,7 @@ contract EIP3074ERC7579Account is Auth {
         doEnable(validator, validatorData);
 
         // do validation
+        // NOTE : userOp.sender will remain as invoker, let's keep this in mind
         PackedUserOperation memory op = userOp;
         op.signature = validatorSig;
 
@@ -68,6 +74,8 @@ contract EIP3074ERC7579Account is Auth {
         }
 
         // do execute
+        // NOTE : this will make some incompatibility with 7579 accounts,
+        // hooks that does not rely on the 7579 account interface will be compatible atm, but this can be fixed
         doExecute(userOp.callData[4:]);
     }
 
