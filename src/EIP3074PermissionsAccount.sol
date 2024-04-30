@@ -63,19 +63,36 @@ contract EIP3074PermissionsAccount is Auth {
             if (calculatedId != permissionId) {
                 revert PermissionIdMismatch();
             }
+            bytes32 commit = getDigest(bytes32(permissionId), authNonce);
             // verify authSig is signed by authority
-            if (!checkAuthSig(authority, getDigest(bytes32(permissionId), authNonce), authSig)) {
+            if (!checkAuthSig(authority, commit, authSig)) {
                 revert InvalidAuthSig();
             }
             // enable permission
-            _enablePermission(permissionId, permissionData);
+            _enablePermission(authority, authNonce, permissionId, permissionData);
         } else {
             // check authNonce matches the nonce stored on permissionConfig
         }
         return _permissionValidation(userOp, userOpHash, authority, permissionId, permissionSig);
     }
 
-    function _enablePermission(bytes12 permissionId, bytes calldata permissionData) internal { }
+    function _enablePermission(
+        address authority,
+        uint256 authNonce,
+        bytes12 permissionId,
+        bytes calldata permissionData
+    ) internal {
+        PermissionConfig storage config = permissionConfig[authority][permissionId];
+        config.nonce = authNonce;
+        bytes[] calldata data = toBytesArray(permissionData);
+        uint256 i;
+        for (i = 0; i < data.length - 1; i++) {
+            address module = address(bytes20(data[i][0:20]));
+            config.policies.push(IPolicy(module));
+            bytes calldata installData = data[i][20:];
+            IModule(module).onInstall(installData);
+        }
+    }
 
     function _permissionValidation(
         PackedUserOperation calldata op,
@@ -85,7 +102,7 @@ contract EIP3074PermissionsAccount is Auth {
         bytes calldata permissionSig
     ) internal returns (uint256) {
         bytes32 id = bytes32(abi.encodePacked(authority, permissionId)); // TODO: make this assembly
-        bytes[] memory data = abi.decode(permissionSig, (bytes[]));
+        bytes[] calldata data = toBytesArray(permissionSig);
         IPolicy[] memory policies = permissionConfig[authority][permissionId].policies;
         PackedUserOperation memory mOp = op; // NOTE: mOp does not change the userOp.sender, just in case ;)
         require(data.length == policies.length + 1, "data array has to be same as policies length + 1");
@@ -159,5 +176,14 @@ contract EIP3074PermissionsAccount is Auth {
         }
     }
 
-    function getPermissionId(bytes calldata permissionData, uint256 nonce) internal returns (bytes12) { }
+    function getPermissionId(bytes calldata permissionData, uint256 nonce) internal returns (bytes12) {
+        return bytes12(keccak256(abi.encodePacked(permissionData, nonce)));
+    }
+
+    function toBytesArray(bytes calldata data) internal returns (bytes[] calldata res) {
+        assembly {
+            res.offset := add(add(data.offset, 32), calldataload(data.offset))
+            res.length := calldataload(sub(res.offset, 32))
+        }
+    }
 }
