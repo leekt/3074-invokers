@@ -10,7 +10,6 @@ import "./utils.sol";
 import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
 /*
     TODO
-    - add hook support
     - merge with https://github.com/thogard785/generalized-interpretable-invoker/tree/main to serve the same role
     - add staking support
     Optional
@@ -30,6 +29,7 @@ contract EIP3074PermissionsAccount is Auth {
 
     error OutOfTimeRange();
     error NonceTooLow();
+    error NonceMismatch();
     error PermissionIdMismatch();
     error InvalidAuthSig();
     error BlockedByPolicy(uint256 i);
@@ -54,9 +54,12 @@ contract EIP3074PermissionsAccount is Auth {
             // when authNonce is lower than lastNonce, we can guarantee it's not working
             revert NonceTooLow();
         }
-        (bytes calldata permissionData, bytes calldata permissionSig, bytes calldata authSig) =
-            parseSig(userOp.signature[44:]);
+        bytes calldata permissionSig = userOp.signature[44:];
         if (!permissionConfig[authority][permissionId].enabled) {
+            // on enable mode
+            bytes calldata permissionData;
+            bytes calldata authSig;
+            (permissionData, permissionSig, authSig) = parseSig(userOp.signature[44:]);
             // enable mode
             // check permissionId matches the keccak256(permissionData)
             bytes12 calculatedId = getPermissionId(permissionData, authNonce);
@@ -72,6 +75,9 @@ contract EIP3074PermissionsAccount is Auth {
             _enablePermission(authority, authNonce, permissionId, permissionData);
         } else {
             // check authNonce matches the nonce stored on permissionConfig
+            if (authNonce != permissionConfig[authority][permissionId].nonce) {
+                revert NonceMismatch();
+            }
         }
         return _permissionValidation(userOp, userOpHash, authority, permissionId, permissionSig);
     }
