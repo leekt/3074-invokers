@@ -41,14 +41,14 @@ contract EIP3074Test is Test {
             callData: abi.encodePacked(
                 account.executeUserOp.selector,
                 abi.encodePacked(AUTHCALL_IDENTIFIER, address(to), uint256(value), data.length, data)
-            ),
+                ),
             paymasterAndData: hex"",
             gasFees: bytes32(0),
             accountGasLimits: bytes32(abi.encodePacked(uint128(1000000), uint128(1000000))),
             preVerificationGas: 0,
             signature: abi.encodePacked(
                 address(mockValidator), uint256(0), abi.encode(hex"deadbeef", hex"cafecafe", abi.encodePacked(r, s, v))
-            )
+                )
         });
         PackedUserOperation[] memory ops = new PackedUserOperation[](1);
         ops[0] = op;
