@@ -19,6 +19,7 @@ import { MultiSendAuthCallOnly } from "./MultiSendAuthCallOnly.sol";
 
 struct PermissionConfig {
     bool enabled;
+    bytes32 digest;
     uint256 nonce;
     IPolicy[] policies; // all policies should be used with userOp validation
     ISigner signer;
@@ -28,6 +29,10 @@ contract EIP3074PermissionsAccount is Auth {
     IEntryPoint public immutable ep;
 
     error OutOfTimeRange();
+    error NonceTooLow();
+    error PermissionIdMismatch();
+    error InvalidAuthSig();
+    error BlockedByPolicy(uint256 i);
 
     mapping(address authority => mapping(bytes12 permissionId => PermissionConfig)) public permissionConfig;
 
@@ -45,40 +50,68 @@ contract EIP3074PermissionsAccount is Auth {
         bytes12 permissionId = bytes12(userOp.signature[0:12]);
         uint256 authNonce = uint256(bytes32(userOp.signature[12:44]));
         address authority = address(bytes20(bytes32(userOp.nonce))); // we have 4 bytes for parallel nonce (2**32)
-        if(authNonce < lastNonce[authority]) {
+        if (authNonce < lastNonce[authority]) {
             // when authNonce is lower than lastNonce, we can guarantee it's not working
             revert NonceTooLow();
         }
-        (bytes calldata permissionData, bytes calldata permissionSig, bytes calldata authSig) = parseSig(userOp.signature[44:])
-        if(!permissionConfig[authority][permissionId].enabled) {
+        (bytes calldata permissionData, bytes calldata permissionSig, bytes calldata authSig) =
+            parseSig(userOp.signature[44:]);
+        if (!permissionConfig[authority][permissionId].enabled) {
             // enable mode
             // check permissionId matches the keccak256(permissionData)
             bytes12 calculatedId = getPermissionId(permissionData, authNonce);
-            if(calculatedId != permissionId) {
+            if (calculatedId != permissionId) {
                 revert PermissionIdMismatch();
             }
             // verify authSig is signed by authority
-            if(!checkAuthSig(authority, getDigest(bytes32(permissionId), authNonce), authSig)) {
+            if (!checkAuthSig(authority, getDigest(bytes32(permissionId), authNonce), authSig)) {
                 revert InvalidAuthSig();
             }
             // enable permission
+            _enablePermission(permissionId, permissionData);
         } else {
             // check authNonce matches the nonce stored on permissionConfig
-
         }
-        return _permissionValidation(authority, permissionId, permissionSig);
+        return _permissionValidation(userOp, userOpHash, authority, permissionId, permissionSig);
     }
 
-    function _permissionValidation(address authority, bytes12 permissionId, bytes calldata permissionSig) internal returns(uint256) {
+    function _enablePermission(bytes12 permissionId, bytes calldata permissionData) internal { }
+
+    function _permissionValidation(
+        PackedUserOperation calldata op,
+        bytes32 userOpHash,
+        address authority,
+        bytes12 permissionId,
+        bytes calldata permissionSig
+    ) internal returns (uint256) {
         bytes32 id = bytes32(abi.encodePacked(authority, permissionId)); // TODO: make this assembly
-        bytes[] memory sig = abi.decode(permissionSig, (bytes[]));
+        bytes[] memory data = abi.decode(permissionSig, (bytes[]));
+        IPolicy[] memory policies = permissionConfig[authority][permissionId].policies;
+        PackedUserOperation memory mOp = op; // NOTE: mOp does not change the userOp.sender, just in case ;)
+        require(data.length == policies.length + 1, "data array has to be same as policies length + 1");
+        for (uint256 i = 0; i < policies.length; i++) {
+            mOp.signature = data[i];
+            uint256 res = policies[i].checkUserOpPolicy(id, mOp);
+            if (res != 0) {
+                // TODO: we will deal with time frame later
+                revert BlockedByPolicy(i);
+            }
+        }
+
+        ISigner signer = permissionConfig[authority][permissionId].signer;
+        mOp.signature = data[data.length - 1];
+        return signer.checkUserOpSignature(id, mOp, userOpHash);
     }
 
     function executeUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash) external {
         require(msg.sender == address(ep), "!ep");
         address authority = address(bytes20(bytes32(userOp.nonce)));
+        bytes12 permissionId = bytes12(userOp.signature[0:12]);
+        uint256 authNonce = uint256(bytes32(userOp.signature[12:44]));
+        bytes32 digest = getDigest(bytes32(permissionId), authNonce);
+        (,, bytes calldata authSig) = parseSig(userOp.signature[44:]);
         // do auth
-        setAuth(authority, validatorData, authSig);
+        setAuth(authority, digest, authSig);
 
         // do execute
         // NOTE : this will make some incompatibility with 7579 accounts,
@@ -86,8 +119,7 @@ contract EIP3074PermissionsAccount is Auth {
         execute(userOp.callData[4:]);
     }
 
-    function setAuth(address authority, bytes calldata validatorData, bytes calldata authSig) internal {
-        bytes32 commit = keccak256(abi.encodePacked(validatorData));
+    function setAuth(address authority, bytes32 commit, bytes calldata authSig) internal {
         Signature memory sig = Signature({
             signer: authority,
             yParity: vToYParity(uint8(bytes1(authSig[64]))),
@@ -96,6 +128,16 @@ contract EIP3074PermissionsAccount is Auth {
         });
         bool success = auth(commit, sig);
         require(success, "Auth failed");
+    }
+
+    function checkAuthSig(address authority, bytes32 digest, bytes calldata authSig) internal view returns (bool) {
+        address signer = ecrecover(
+            digest,
+            uint8(bytes1(authSig[64])), // NOTE: v value has to be 27 or 28, this will be shifted to 0 or 1 on setAuth() to match the 3074 mechanism
+            bytes32(authSig[0:32]),
+            bytes32(authSig[32:64])
+        );
+        return signer == authority;
     }
 
     function execute(bytes calldata callData) internal {
@@ -116,4 +158,6 @@ contract EIP3074PermissionsAccount is Auth {
             authSig.length := calldataload(sub(authSig.offset, 32))
         }
     }
+
+    function getPermissionId(bytes calldata permissionData, uint256 nonce) internal returns (bytes12) { }
 }

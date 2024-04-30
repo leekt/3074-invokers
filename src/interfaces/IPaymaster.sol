@@ -8,8 +8,9 @@ import "./PackedUserOperation.sol";
  * A paymaster must hold a stake to cover the required entrypoint stake and also the gas for the transaction.
  */
 interface IPaymaster {
-    enum PostOpMode {
-        // User op succeeded.
+    enum PostOpMode
+    // User op succeeded.
+    {
         opSucceeded,
         // User op reverted. Still has to pay for gas.
         opReverted,
