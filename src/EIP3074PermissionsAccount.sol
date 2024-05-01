@@ -22,6 +22,9 @@ struct PermissionConfig {
     uint256 nonce;
     IPolicy[] policies; // all policies should be used with userOp validation
     ISigner signer;
+    uint8 v;
+    bytes32 r;
+    bytes32 s;
 }
 
 contract EIP3074PermissionsAccount is Auth {
@@ -66,13 +69,8 @@ contract EIP3074PermissionsAccount is Auth {
             if (calculatedId != permissionId) {
                 revert PermissionIdMismatch();
             }
-            bytes32 commit = getDigest(bytes32(permissionId), authNonce);
-            // verify authSig is signed by authority
-            if (!checkAuthSig(authority, commit, authSig)) {
-                revert InvalidAuthSig();
-            }
             // enable permission
-            _enablePermission(authority, authNonce, permissionId, permissionData);
+            _enablePermission(authority, authNonce, authSig, permissionId, permissionData);
         } else {
             // check authNonce matches the nonce stored on permissionConfig
             if (authNonce != permissionConfig[authority][permissionId].nonce) {
@@ -85,9 +83,18 @@ contract EIP3074PermissionsAccount is Auth {
     function _enablePermission(
         address authority,
         uint256 authNonce,
+        bytes calldata authSig,
         bytes12 permissionId,
         bytes calldata permissionData
     ) internal {
+        bytes32 digest = getDigest(bytes32(permissionId), authNonce);
+        // verify authSig is signed by authority
+        uint8 v = uint8(bytes1(authSig[64]));
+        bytes32 r = bytes32(authSig[0:32]);
+        bytes32 s = bytes32(authSig[32:64]);
+        if (!checkAuthSig(authority, digest, v, r, s)) {
+            revert InvalidAuthSig();
+        }
         PermissionConfig storage config = permissionConfig[authority][permissionId];
         config.nonce = authNonce;
         bytes[] calldata data = toBytesArray(permissionData);
@@ -98,6 +105,14 @@ contract EIP3074PermissionsAccount is Auth {
             bytes calldata installData = data[i][20:];
             IModule(module).onInstall(installData);
         }
+        config.signer = ISigner(address(bytes20(data[i][0:20])));
+        IModule(address(bytes20(data[i][0:20]))).onInstall(data[i][20:]);
+        config.enabled = true;
+        config.nonce = authNonce;
+        config.v = vToYParity(v);
+        config.r = r;
+        config.s = s;
+        config.digest = digest;
     }
 
     function _permissionValidation(
@@ -131,10 +146,10 @@ contract EIP3074PermissionsAccount is Auth {
         address authority = address(bytes20(bytes32(userOp.nonce)));
         bytes12 permissionId = bytes12(userOp.signature[0:12]);
         uint256 authNonce = uint256(bytes32(userOp.signature[12:44]));
-        bytes32 digest = getDigest(bytes32(permissionId), authNonce);
-        (,, bytes calldata authSig) = parseSig(userOp.signature[44:]);
+
+        PermissionConfig memory config = permissionConfig[authority][permissionId];
         // do auth
-        setAuth(authority, digest, authSig);
+        setAuth(authority, bytes32(permissionId), config.v, config.r, config.s);
 
         // do execute
         // NOTE : this will make some incompatibility with 7579 accounts,
@@ -142,23 +157,23 @@ contract EIP3074PermissionsAccount is Auth {
         execute(userOp.callData[4:]);
     }
 
-    function setAuth(address authority, bytes32 commit, bytes calldata authSig) internal {
+    function setAuth(address authority, bytes32 commit, uint8 v, bytes32 r, bytes32 s) internal {
         Signature memory sig = Signature({
             signer: authority,
-            yParity: vToYParity(uint8(bytes1(authSig[64]))),
-            r: bytes32(authSig[0:32]),
-            s: bytes32(authSig[32:64])
+            yParity: v,
+            r: r,
+            s: s
         });
         bool success = auth(commit, sig);
         require(success, "Auth failed");
     }
 
-    function checkAuthSig(address authority, bytes32 digest, bytes calldata authSig) internal view returns (bool) {
+    function checkAuthSig(address authority, bytes32 digest, uint8 v, bytes32 r, bytes32 s) internal view returns (bool) {
         address signer = ecrecover(
             digest,
-            uint8(bytes1(authSig[64])), // NOTE: v value has to be 27 or 28, this will be shifted to 0 or 1 on setAuth() to match the 3074 mechanism
-            bytes32(authSig[0:32]),
-            bytes32(authSig[32:64])
+            v, // NOTE: v value has to be 27 or 28, this will be shifted to 0 or 1 on setAuth() to match the 3074 mechanism
+            r,
+            s
         );
         return signer == authority;
     }
@@ -182,7 +197,7 @@ contract EIP3074PermissionsAccount is Auth {
         }
     }
 
-    function getPermissionId(bytes calldata permissionData, uint256 nonce) internal returns (bytes12) {
+    function getPermissionId(bytes calldata permissionData, uint256 nonce) public returns (bytes12) {
         return bytes12(keccak256(abi.encodePacked(permissionData, nonce)));
     }
 
