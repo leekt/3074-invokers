@@ -10,7 +10,7 @@ pragma solidity >=0.7.0 <0.9.0;
  * @author Stefan George - @Georgi87
  * @author Richard Meissner - @rmeissner
  */
-contract MultiSendAuthCallOnly {
+library MultiSendAuthCallOnly {
     /**
      * @dev Sends multiple transactions via AUTHCALL and reverts all if one fails.
      * @param transactions Encoded transactions. Each transaction is encoded as a packed bytes of
@@ -25,7 +25,7 @@ contract MultiSendAuthCallOnly {
      * @notice This method is payable as delegatecalls keep the msg.value from the previous call
      *         If the calling method (e.g. execTransaction) received ETH this would revert otherwise
      */
-    function multiSend(bytes memory transactions) public payable {
+    function multiSend(bytes memory transactions) internal {
         /* solhint-disable no-inline-assembly */
         /// @solidity memory-safe-assembly
         assembly {
